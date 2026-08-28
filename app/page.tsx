@@ -54,7 +54,6 @@ export default function Home() {
   const [mode, setMode] = useState<Mode>('party');
   const [round, setRound] = useState(0);
   const [selected, setSelected] = useState<Category | null>(null);
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [rotation, setRotation] = useState(0);
   const [spinning, setSpinning] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -96,13 +95,13 @@ export default function Home() {
   }, [timerRunning, sound]);
   useEffect(() => () => { if (wheelTimeoutRef.current) clearTimeout(wheelTimeoutRef.current); }, []);
 
-  const reveal = useCallback((category: Category, index: number) => {
+  const reveal = useCallback((category: Category) => {
     setRound((current) => {
       const nextRound = current + 1;
       setHistory((items) => [{ ...category, round: nextRound, board }, ...items]);
       return nextRound;
     });
-    setSelected(category); setSelectedIndex(index); setTimerRunning(false); setTimerLeft(timerDuration);
+    setSelected(category); setTimerRunning(false); setTimerLeft(timerDuration);
   }, [board, timerDuration]);
 
   const spin = useCallback(() => {
@@ -117,10 +116,10 @@ export default function Home() {
     const currentMod = ((rotation % 360) + 360) % 360;
     const extra = ((360 - targetCenter - currentMod) + 720) % 360;
     const nextRotation = rotation + 5 * 360 + extra;
-    setSpinning(true); setSelected(null); setSelectedIndex(null); setTimerRunning(false);
+    setSpinning(true); setSelected(null); setTimerRunning(false);
     if (sound) playTone('start');
     requestAnimationFrame(() => setRotation(nextRotation));
-    wheelTimeoutRef.current = setTimeout(() => { setSpinning(false); reveal(categories[index], index); if (sound) playTone('finish'); }, spinDuration + 80);
+    wheelTimeoutRef.current = setTimeout(() => { setSpinning(false); reveal(categories[index]); if (sound) playTone('finish'); }, spinDuration + 80);
   }, [categories, reveal, rotation, sound, spinDuration, spinning]);
 
   useEffect(() => {
@@ -135,13 +134,12 @@ export default function Home() {
 
   const resetGame = () => {
     if (wheelTimeoutRef.current) clearTimeout(wheelTimeoutRef.current);
-    setRound(0); setSelected(null); setSelectedIndex(null); setRotation(0); setSpinning(false); setHistory([]); setTimerRunning(false); setTimerLeft(timerDuration);
+    setRound(0); setSelected(null); setRotation(0); setSpinning(false); setHistory([]); setTimerRunning(false); setTimerLeft(timerDuration);
     deckRef.current = []; lastIndexRef.current = null;
   };
   const changeBoard = (next: BoardKey) => {
-    setBoard(next); setSelected(null); setSelectedIndex(null); setTimerRunning(false); setTimerLeft(timerDuration); deckRef.current = []; lastIndexRef.current = null;
+    setBoard(next); setSelected(null); setTimerRunning(false); setTimerLeft(timerDuration); deckRef.current = []; lastIndexRef.current = null;
   };
-  const selectManually = (category: Category, index: number) => { if (!spinning) reveal(category, index); };
   const timerProgress = timerDuration === 0 ? 0 : (timerLeft / timerDuration) * 100;
   const timerColor = timerLeft <= 5 ? '#ff6689' : timerLeft <= 10 ? '#ffbf47' : '#55c8ff';
 
@@ -157,36 +155,24 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="pixel-hero">
-        <div className="pixel-hero-copy">
-          <span className="hero-kicker">♪ Gotowi na muzyczną przygodę?</span>
-          <h1>Posłuchaj.<br /><em>Zakręć.</em> Zgadnij!</h1>
-          <p>Włącz fragment piosenki, zakręć kołem i pozwól klasie zdobyć punkt.</p>
-          <div className="hero-steps" aria-label="Jak prowadzić grę">
-            <span><b>1</b> Odtwórz</span><span><b>2</b> Losuj</span><span><b>3</b> Odpowiadaj</span>
-          </div>
-        </div>
-        <div className="pixel-stage" aria-hidden="true">
-          <img src="/dancing-animals.avif" alt="" />
-          <i className="floating-note note-one">♪</i><i className="floating-note note-two">♫</i><i className="floating-note note-three">♪</i>
-        </div>
-      </section>
-
       <div className="game-layout">
         <section className="wheel-section" aria-label="Koło kategorii">
-          <div className="wheel-stage"><div className="wheel-pointer" aria-hidden="true" /><div className={`wheel ${spinning ? 'is-spinning' : ''}`} style={wheelStyle} aria-label="Koło z pięcioma kategoriami"><div className="wheel-lines" aria-hidden="true" /></div><div className="wheel-hub" aria-hidden="true"><span>{spinning ? '···' : 'SPIN'}</span></div></div>
-          <button className="spin-button" onClick={spin} disabled={spinning}><span aria-hidden="true">{spinning ? '◌' : '▶'}</span> {spinning ? 'Losowanie…' : 'Start losowania'}</button>
-          <p className="keyboard-hint">Możesz też nacisnąć spację</p>
-          <div className="legend" aria-label="Kategorie planszy">{categories.map((category, index) => <button key={category.id} className={selectedIndex === index ? 'chosen' : ''} onClick={() => selectManually(category, index)} disabled={spinning} title={`Wybierz ręcznie: ${category.name}`}><span className="legend-dot" style={{ background: category.color }} /><span aria-hidden="true">{category.icon}</span> {category.short}</button>)}</div>
+          <div className="wheel-stage">
+            <div className="wheel-pointer" aria-hidden="true" />
+            <div className={`wheel ${spinning ? 'is-spinning' : ''}`} style={wheelStyle} aria-label="Koło z pięcioma kategoriami"><div className="wheel-lines" aria-hidden="true" /></div>
+            <button className="wheel-hub" onClick={spin} disabled={spinning} aria-label={spinning ? 'Trwa losowanie' : 'Losuj kategorię'}>
+              <span>{spinning ? '···' : 'LOSUJ'}</span><small>{spinning ? 'chwila' : 'lub spacja'}</small>
+            </button>
+          </div>
         </section>
 
         <section className="result-section" aria-live="polite">
           <div className="round-header"><span>Runda {round === 0 ? 1 : round}</span><small>{round === 0 ? 'Wszystko gotowe. Zaczynamy?' : `Plansza ${board}`}</small></div>
           <div className={`result-card ${selected ? 'has-result' : ''}`} style={selected ? { '--accent': selected.color } as React.CSSProperties : undefined}>
-            {selected ? <><div className="result-kicker"><span>{selected.icon}</span> Wylosowana kategoria</div><h1>{selected.name}</h1><p>{selected.description}</p><div className="result-meta"><span>Plansza {board}</span><span>Runda {round}</span></div></> : <><div className="ready-icon" aria-hidden="true">♫</div><h1>{spinning ? 'Koło się kręci…' : 'Czas na muzykę!'}</h1><p>{spinning ? 'Za chwilę poznamy zadanie dla klasy.' : 'Włącz fragment utworu, a potem rozpocznij losowanie kategorii.'}</p></>}
+            {selected ? <><div className="result-kicker"><span>{selected.icon}</span> Wylosowana kategoria</div><h1>{selected.name}</h1><p>{selected.description}</p><div className="result-meta"><span>Plansza {board}</span><span>Runda {round}</span></div></> : <><div className="ready-icon" aria-hidden="true">?</div><h1>{spinning ? 'Losujemy…' : 'Kategoria'}</h1><p>{spinning ? 'Za chwilę pojawi się zadanie dla klasy.' : 'Kliknij LOSUJ na środku koła.'}</p></>}
           </div>
           {selected && timerEnabled && <div className="timer-card"><div className="timer-ring" style={{ '--progress': `${timerProgress * 3.6}deg`, '--timer-color': timerColor } as React.CSSProperties}><div><strong>{timerLeft}</strong><small>sek.</small></div></div><div className="timer-copy"><small>Czas na odpowiedź</small><strong>{timerRunning ? 'Odliczanie trwa' : timerLeft === 0 ? 'Czas minął!' : 'Gotowi?'}</strong></div><div className="timer-actions"><button onClick={() => { if (timerLeft === 0) setTimerLeft(timerDuration); setTimerRunning((current) => !current); }}>{timerRunning ? 'Pauza' : timerLeft === 0 ? 'Jeszcze raz' : 'Start'}</button><button className="secondary" onClick={() => { setTimerRunning(false); setTimerLeft(timerDuration); }}>Reset</button></div></div>}
-          <div className="round-actions"><button className="reset-button" onClick={resetGame}>↺ Reset gry</button>{selected && <button className="next-button" onClick={() => { setSelected(null); setSelectedIndex(null); setTimerRunning(false); setTimerLeft(timerDuration); }}>Następna runda →</button>}</div>
+          <div className="round-actions"><button className="reset-button" onClick={resetGame}>↺ Reset gry</button>{selected && <button className="next-button" onClick={() => { setSelected(null); setTimerRunning(false); setTimerLeft(timerDuration); }}>Następna runda →</button>}</div>
         </section>
       </div>
 
