@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-type BoardKey = 'A' | 'B';
+type BoardKey = 'A' | 'B' | 'C';
 type Mode = 'party' | 'calm';
 type Category = { id: string; name: string; short: string; color: string; icon: string; description: string };
 type HistoryItem = Category & { round: number; board: BoardKey };
 
-const BOARDS: Record<BoardKey, Category[]> = {
+const BOARDS: Record<Exclude<BoardKey, 'C'>, Category[]> = {
   A: [
     { id: 'a1', name: 'Rok wydania ±4', short: '±4 lata', color: '#ffbf47', icon: '📅', description: 'Podaj rok wydania utworu. Możesz pomylić się o maksymalnie 4 lata.' },
     { id: 'a2', name: 'Rok wydania ±2', short: '±2 lata', color: '#55c8ff', icon: '🎯', description: 'Podaj rok wydania utworu. Tolerancja wynosi tylko 2 lata.' },
@@ -23,7 +23,40 @@ const BOARDS: Record<BoardKey, Category[]> = {
     { id: 'b5', name: 'Rok wydania ±3', short: '±3 lata', color: '#5ee3a2', icon: '🎯', description: 'Podaj rok wydania utworu z tolerancją 3 lat.' },
   ],
 };
+const BOARD_C = BOARDS.A.map((category, index) => ({
+  color: category.color,
+  options: category.name === BOARDS.B[index].name ? [category] : [category, BOARDS.B[index]],
+}));
+const BOARD_INFO: Record<BoardKey, { title: string; summary: string; categories: { color: string; label: string; description: string }[] }> = {
+  A: {
+    title: 'Plansza A · szybki start',
+    summary: 'Łagodniejszy wariant na rozgrzewkę. Klasa rozpoznaje czas powstania utworu i typ wykonawcy.',
+    categories: BOARDS.A.map(({ color, name, description }) => ({ color, label: name, description })),
+  },
+  B: {
+    title: 'Plansza B · muzyczne konkrety',
+    summary: 'Wariant wymagający większej precyzji: tytuł, wykonawca oraz dokładniejsze datowanie utworu.',
+    categories: BOARDS.B.map(({ color, name, description }) => ({ color, label: name, description })),
+  },
+  C: {
+    title: 'Plansza C · muzyczny miks',
+    summary: 'Łączy plansze A i B. Koło losuje kolor, a aplikacja wybiera jedno z przypisanych do niego zadań.',
+    categories: BOARD_C.map(({ color, options }) => ({
+      color,
+      label: options.map(({ short }) => short).join(' lub '),
+      description: options.length === 1
+        ? options[0].description
+        : `Po wylosowaniu koloru aplikacja wybierze: „${options[0].name}” albo „${options[1].name}”.`,
+    })),
+  },
+};
 const WHEEL = 'conic-gradient(from -36deg, #ffbf47 0deg 72deg, #55c8ff 72deg 144deg, #c59bff 144deg 216deg, #ff79ab 216deg 288deg, #5ee3a2 288deg 360deg)';
+
+function pickCategory(board: BoardKey, index: number) {
+  if (board !== 'C') return BOARDS[board][index];
+  const options = BOARD_C[index].options;
+  return options[Math.floor(Math.random() * options.length)];
+}
 
 function shuffle(values: number[]) {
   const next = [...values];
@@ -59,6 +92,7 @@ export default function Home() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
   const [sound, setSound] = useState(true);
   const [timerEnabled, setTimerEnabled] = useState(true);
   const [timerDuration, setTimerDuration] = useState(30);
@@ -68,20 +102,23 @@ export default function Home() {
   const lastIndexRef = useRef<number | null>(null);
   const wheelTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const categories = BOARDS[board];
+  const boardInfo = BOARD_INFO[board];
   const spinDuration = mode === 'party' ? 3600 : 2200;
   const wheelStyle = useMemo(() => ({ background: WHEEL, transform: `rotate(${rotation}deg)`, transitionDuration: spinning ? `${spinDuration}ms` : '0ms' }), [rotation, spinning, spinDuration]);
 
   useEffect(() => {
     const saved = window.localStorage.getItem('muzyczne-bingo-settings');
     if (!saved) return;
-    try {
-      const parsed = JSON.parse(saved) as { sound?: boolean; timerEnabled?: boolean; timerDuration?: number; mode?: Mode };
-      if (typeof parsed.sound === 'boolean') setSound(parsed.sound);
-      if (typeof parsed.timerEnabled === 'boolean') setTimerEnabled(parsed.timerEnabled);
-      if (typeof parsed.timerDuration === 'number') { setTimerDuration(parsed.timerDuration); setTimerLeft(parsed.timerDuration); }
-      if (parsed.mode === 'party' || parsed.mode === 'calm') setMode(parsed.mode);
-    } catch { /* Invalid settings are ignored. */ }
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        const parsed = JSON.parse(saved) as { sound?: boolean; timerEnabled?: boolean; timerDuration?: number; mode?: Mode };
+        if (typeof parsed.sound === 'boolean') setSound(parsed.sound);
+        if (typeof parsed.timerEnabled === 'boolean') setTimerEnabled(parsed.timerEnabled);
+        if (typeof parsed.timerDuration === 'number') { setTimerDuration(parsed.timerDuration); setTimerLeft(parsed.timerDuration); }
+        if (parsed.mode === 'party' || parsed.mode === 'calm') setMode(parsed.mode);
+      } catch { /* Invalid settings are ignored. */ }
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, []);
   useEffect(() => { window.localStorage.setItem('muzyczne-bingo-settings', JSON.stringify({ sound, timerEnabled, timerDuration, mode })); }, [sound, timerEnabled, timerDuration, mode]);
   useEffect(() => {
@@ -119,18 +156,18 @@ export default function Home() {
     setSpinning(true); setSelected(null); setTimerRunning(false);
     if (sound) playTone('start');
     requestAnimationFrame(() => setRotation(nextRotation));
-    wheelTimeoutRef.current = setTimeout(() => { setSpinning(false); reveal(categories[index]); if (sound) playTone('finish'); }, spinDuration + 80);
-  }, [categories, reveal, rotation, sound, spinDuration, spinning]);
+    wheelTimeoutRef.current = setTimeout(() => { setSpinning(false); reveal(pickCategory(board, index)); if (sound) playTone('finish'); }, spinDuration + 80);
+  }, [board, reveal, rotation, sound, spinDuration, spinning]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
-      if (event.code === 'Space' && !['INPUT', 'BUTTON', 'SELECT'].includes(target.tagName) && !settingsOpen && !historyOpen) { event.preventDefault(); spin(); }
-      if (event.code === 'Escape') { setSettingsOpen(false); setHistoryOpen(false); }
+      if (event.code === 'Space' && !['INPUT', 'BUTTON', 'SELECT'].includes(target.tagName) && !settingsOpen && !historyOpen && !infoOpen) { event.preventDefault(); spin(); }
+      if (event.code === 'Escape') { setSettingsOpen(false); setHistoryOpen(false); setInfoOpen(false); }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [historyOpen, settingsOpen, spin]);
+  }, [historyOpen, infoOpen, settingsOpen, spin]);
 
   const resetGame = () => {
     if (wheelTimeoutRef.current) clearTimeout(wheelTimeoutRef.current);
@@ -147,13 +184,22 @@ export default function Home() {
     <main className={`app ${mode}`}>
       <header className="topbar">
         <div className="brand" aria-label="Muzyczne Bingo"><span className="brand-mark" aria-hidden="true">♪</span><span><strong>Muzyczne Bingo</strong><small>gra na lekcję muzyki</small></span></div>
-        <nav className="board-tabs" aria-label="Wybór planszy"><button className={board === 'A' ? 'active' : ''} onClick={() => changeBoard('A')}>Plansza A</button><button className={board === 'B' ? 'active' : ''} onClick={() => changeBoard('B')}>Plansza B</button></nav>
+        <nav className="board-tabs" aria-label="Wybór planszy"><button className={board === 'A' ? 'active' : ''} onClick={() => changeBoard('A')}>Plansza A</button><button className={board === 'B' ? 'active' : ''} onClick={() => changeBoard('B')}>Plansza B</button><button className={board === 'C' ? 'active' : ''} onClick={() => changeBoard('C')}>Plansza C</button></nav>
         <div className="header-actions">
+          <button className="icon-button info-button" onClick={() => setInfoOpen(true)} aria-label="Instrukcja i kategorie plansz" title="Jak grać"><span aria-hidden="true">i</span></button>
           <button className="icon-button" onClick={() => setHistoryOpen(true)} aria-label={`Historia losowań: ${history.length}`} title="Historia"><span aria-hidden="true">☷</span>{history.length > 0 && <b>{history.length}</b>}</button>
           <button className="icon-button" onClick={() => setSettingsOpen(true)} aria-label="Ustawienia" title="Ustawienia"><span aria-hidden="true">⚙</span></button>
           <button className="icon-button fullscreen" onClick={() => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()} aria-label="Pełny ekran" title="Pełny ekran"><span aria-hidden="true">⛶</span></button>
         </div>
       </header>
+
+      <section className="board-guide" aria-label={`Kategorie planszy ${board}`}>
+        <div className="board-guide-copy"><small>Teraz gramy</small><strong>{boardInfo.title}</strong><p>{boardInfo.summary}</p></div>
+        <div className="category-chips">
+          {boardInfo.categories.map((category, index) => <span key={`${board}-${index}`} style={{ '--chip-color': category.color } as React.CSSProperties}><i aria-hidden="true" />{category.label}</span>)}
+        </div>
+        <button onClick={() => setInfoOpen(true)}>Zasady i kategorie <span aria-hidden="true">→</span></button>
+      </section>
 
       <div className="game-layout">
         <section className="wheel-section" aria-label="Koło kategorii">
@@ -176,8 +222,19 @@ export default function Home() {
         </section>
       </div>
 
-      {(historyOpen || settingsOpen) && <button className="overlay" aria-label="Zamknij okno" onClick={() => { setHistoryOpen(false); setSettingsOpen(false); }} />}
+      {(historyOpen || settingsOpen || infoOpen) && <button className="overlay" aria-label="Zamknij okno" onClick={() => { setHistoryOpen(false); setSettingsOpen(false); setInfoOpen(false); }} />}
       <aside className={`drawer ${historyOpen ? 'open' : ''}`} aria-hidden={!historyOpen}><div className="panel-header"><div><small>Przebieg lekcji</small><h2>Historia rund</h2></div><button onClick={() => setHistoryOpen(false)} aria-label="Zamknij">×</button></div><div className="history-list">{history.length === 0 ? <div className="empty-state"><span>☷</span><strong>Jeszcze nic tu nie ma</strong><p>Pierwsze losowanie pojawi się w historii.</p></div> : history.map((item, index) => <article key={`${item.round}-${index}`}><b>{item.round}</b><span className="history-icon" style={{ background: item.color }}>{item.icon}</span><div><strong>{item.name}</strong><small>Plansza {item.board}</small></div></article>)}</div></aside>
+      <section className={`modal guide-modal ${infoOpen ? 'open' : ''}`} aria-hidden={!infoOpen} role="dialog" aria-modal="true" aria-labelledby="guide-title">
+        <div className="panel-header"><div><small>Gotowe do wyjaśnienia klasie</small><h2 id="guide-title">Plansze, kolory i zasady</h2></div><button onClick={() => setInfoOpen(false)} aria-label="Zamknij">×</button></div>
+        <div className="lesson-steps"><strong>Jak poprowadzić rundę?</strong><ol><li>Wybierz planszę A, B lub C.</li><li>Włącz klasie fragment wybranego utworu.</li><li>Wylosuj kolor i przeczytaj zadanie widoczne po prawej.</li><li>Uruchom timer, gdy uczniowie będą gotowi.</li></ol></div>
+        <div className="boards-reference">
+          {(Object.keys(BOARD_INFO) as BoardKey[]).map((key) => <article className={board === key ? 'active' : ''} key={key}>
+            <header><b>{key}</b><div><strong>{BOARD_INFO[key].title}</strong><p>{BOARD_INFO[key].summary}</p></div></header>
+            <div className="reference-categories">{BOARD_INFO[key].categories.map((category, index) => <div key={`${key}-guide-${index}`}><i style={{ background: category.color }} aria-hidden="true" /><span><strong>{category.label}</strong><small>{category.description}</small></span></div>)}</div>
+          </article>)}
+        </div>
+        <button className="save-settings" onClick={() => setInfoOpen(false)}>Rozumiem, zaczynamy</button>
+      </section>
       <section className={`modal ${settingsOpen ? 'open' : ''}`} aria-hidden={!settingsOpen}><div className="panel-header"><div><small>Dopasuj do klasy</small><h2>Ustawienia gry</h2></div><button onClick={() => setSettingsOpen(false)} aria-label="Zamknij">×</button></div><div className="settings-body"><label className="setting-row"><span><strong>Tryb prezentacji</strong><small>Wybierz tempo animacji</small></span><select value={mode} onChange={(event) => setMode(event.target.value as Mode)}><option value="party">Energetyczny</option><option value="calm">Spokojny</option></select></label><label className="setting-row"><span><strong>Dźwięki</strong><small>Sygnał losowania i timera</small></span><input type="checkbox" checked={sound} onChange={(event) => setSound(event.target.checked)} /></label><label className="setting-row"><span><strong>Timer odpowiedzi</strong><small>Pokaż odliczanie po losowaniu</small></span><input type="checkbox" checked={timerEnabled} onChange={(event) => setTimerEnabled(event.target.checked)} /></label><label className="range-row"><span><strong>Czas na odpowiedź</strong><b>{timerDuration} sek.</b></span><input type="range" min="10" max="90" step="5" value={timerDuration} onChange={(event) => { const next = Number(event.target.value); setTimerDuration(next); setTimerLeft(next); setTimerRunning(false); }} disabled={!timerEnabled} /></label></div><button className="save-settings" onClick={() => setSettingsOpen(false)}>Gotowe</button></section>
     </main>
   );
