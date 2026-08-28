@@ -157,7 +157,20 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="lesson-strip" aria-label="Jak prowadzić grę"><span><b>1</b> Odtwórz fragment piosenki</span><i aria-hidden="true">→</i><span><b>2</b> Zakręć kołem</span><i aria-hidden="true">→</i><span><b>3</b> Klasa odpowiada</span></section>
+      <section className="pixel-hero">
+        <div className="pixel-hero-copy">
+          <span className="hero-kicker">♪ Gotowi na muzyczną przygodę?</span>
+          <h1>Posłuchaj.<br /><em>Zakręć.</em> Zgadnij!</h1>
+          <p>Włącz fragment piosenki, zakręć kołem i pozwól klasie zdobyć punkt.</p>
+          <div className="hero-steps" aria-label="Jak prowadzić grę">
+            <span><b>1</b> Odtwórz</span><span><b>2</b> Losuj</span><span><b>3</b> Odpowiadaj</span>
+          </div>
+        </div>
+        <div className="pixel-stage" aria-hidden="true">
+          <img src="/dancing-animals.avif" alt="" />
+          <i className="floating-note note-one">♪</i><i className="floating-note note-two">♫</i><i className="floating-note note-three">♪</i>
+        </div>
+      </section>
 
       <div className="game-layout">
         <section className="wheel-section" aria-label="Koło kategorii">

@@ -10,6 +10,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://muzyczne-bingo.vercel.app'),
   title: 'Muzyczne Bingo — gra na lekcję muzyki',
   description: 'Interaktywne muzyczne bingo z kołem kategorii, timerem i historią rund do prowadzenia lekcji w szkole.',
   openGraph: {
